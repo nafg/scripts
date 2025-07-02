@@ -2,7 +2,7 @@ import requests.RequestAuth
 import upickle.default.*
 
 object OpenAI {
-  private case class ChatMessage(role: String, content: String) derives Reader
+  case class ChatMessage(role: String, content: String) derives ReadWriter
   private case class ResponseChoice(message: ChatMessage, index: Int)
       derives Reader
   private case class ChatCompletionResponse(
@@ -13,13 +13,12 @@ object OpenAI {
   // Request commit message from OpenAI API
   def callOpenAIChatCompletion(
       apiKey: String,
-      messages: ujson.Arr,
       model: String = "gpt-4.1-mini",
       temperature: Double = 0.5
-  ): String = {
+  )(messages: ChatMessage*): String = {
     val requestBody = ujson.Obj(
       "model" -> model,
-      "messages" -> messages,
+      "messages" -> writeJs(messages),
       "temperature" -> temperature,
       "response_format" -> ujson.Obj("type" -> "json_object")
     )

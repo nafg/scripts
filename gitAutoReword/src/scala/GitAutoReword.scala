@@ -30,18 +30,17 @@ private def systemPrompt: String =
     |ONLY output the JSON object.
     """.stripMargin
 
-private def extraInstructionsMessage: Option[ujson.Obj] = {
+private def extraInstructionsMessage: OpenAI.ChatMessage = {
   val file = os.pwd / ".github" / "git-commit-instructions.md"
   if (os.exists(file))
-    Some(
-      ujson.Obj(
-        "role" -> "system",
-        "content" ->
-          ("Additional commit message guidelines (do NOT change the required JSON output format):\n\n" +
-            os.read(file))
-      )
+    OpenAI.ChatMessage(
+      role = "system",
+      content =
+        "Additional commit message guidelines (do NOT change the required JSON output format):\n\n" +
+          os.read(file)
     )
-  else None
+  else
+    OpenAI.ChatMessage(role = "system", content = "")
 }
 
 private def exec(parts: os.Shellable*): String =
@@ -94,20 +93,19 @@ object GitAutoReword
                 .last
                 .stripSuffix(".git")
 
-            val msgJson = {
-              val messagesSeq: Seq[ujson.Value] =
-                Seq(ujson.Obj("role" -> "system", "content" -> systemPrompt)) ++
-                  extraInstructionsMessage.toSeq ++
-                  Seq(
-                    ujson.Obj(
-                      "role" -> "user",
-                      "content" -> s"Repository: $repoName\n\nGenerate a commit message for this diff:\n\n$diff"
-                    )
-                  )
-              val messages = ujson.Arr(messagesSeq*)
-              println(ujson.write(messages, indent = 2))
-              OpenAI.callOpenAIChatCompletion(apiKey, messages)
-            }
+            val msgJson =
+              OpenAI.callOpenAIChatCompletion(apiKey)(
+                OpenAI.ChatMessage(role = "system", content = systemPrompt),
+                extraInstructionsMessage,
+                OpenAI.ChatMessage(
+                  role = "user",
+                  content = s"""Repository: $repoName
+                       |
+                       |Generate a commit message for this diff:
+                       |
+                       |$diff""".stripMargin
+                )
+              )
 
             val commitMessage = read[CommitMessage](msgJson)
 

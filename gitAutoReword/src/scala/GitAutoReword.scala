@@ -17,7 +17,11 @@ object GitAutoReword {
     macroRW
   implicit val commitMessageRW: ReadWriter[CommitMessage] = macroRW
 
-  private val defaultSystemPrompt = """
+  // Always use the built-in prompt to enforce JSON output. Any optional
+  // instructions file is added as a SECOND system message, so it cannot
+  // override the required output format.
+  private def systemPrompt: String =
+    """
     |You are an expert at writing Git commit messages.
     |Analyze the diff and create a clear, concise commit message that explains:
     |1. WHAT was changed (in the subject line)
@@ -35,10 +39,18 @@ object GitAutoReword {
     |ONLY output the JSON object.
     """.stripMargin
 
-  private def getSystemPrompt: String = {
+  private def extraInstructionsMessage: Option[ujson.Obj] = {
     val file = os.pwd / ".github" / "git-commit-instructions.md"
-    if (os.exists(file)) os.read(file)
-    else defaultSystemPrompt
+    if (os.exists(file))
+      Some(
+        ujson.Obj(
+          "role" -> "system",
+          "content" ->
+            ("Additional commit message guidelines (do NOT change the required JSON output format):\n\n" +
+              os.read(file))
+        )
+      )
+    else None
   }
 
   private def exec(parts: os.Shellable*): String =
@@ -107,13 +119,16 @@ object GitAutoReword {
     }
 
     val msgJson = {
-      val messages = ujson.Arr(
-        ujson.Obj("role" -> "system", "content" -> getSystemPrompt),
-        ujson.Obj(
-          "role" -> "user",
-          "content" -> s"Repository: $repoName\n\nGenerate a commit message for this diff:\n\n$diff"
-        )
-      )
+      val messagesSeq: Seq[ujson.Value] =
+        Seq(ujson.Obj("role" -> "system", "content" -> systemPrompt)) ++
+          extraInstructionsMessage.toSeq ++
+          Seq(
+            ujson.Obj(
+              "role" -> "user",
+              "content" -> s"Repository: $repoName\n\nGenerate a commit message for this diff:\n\n$diff"
+            )
+          )
+      val messages = ujson.Arr(messagesSeq*)
       callOpenAIChatCompletion(apiKey, messages)
     }
 

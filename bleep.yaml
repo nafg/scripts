@@ -25,6 +25,6 @@ templates:
     platform:
       name: jvm
     scala:
-      options: -encoding utf8 -feature -unchecked
+      options: -encoding utf8 -feature -unchecked -source:3.4-migration -rewrite
       strict: true
       version: 3.7.1

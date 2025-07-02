@@ -3,11 +3,14 @@ $version: 0.0.12
 jvm:
   name: graalvm-java17:22.3.1
 projects:
+  gitAutoReword:
+    extends: template-common
+    platform:
+      mainClass: GitAutoReword
   testIndex:
     dependencies:
     - com.googlecode.lanterna:lanterna:3.2.0-alpha1
     - com.lihaoyi::fansi:0.5.0
-    - com.lihaoyi::os-lib:0.9.1
     - com.olvind.tui::tui:0.0.7
     - dev.zio::zio-streams:2.1.19
     extends: template-common
@@ -15,6 +18,7 @@ projects:
       mainClass: testIndex
 templates:
   template-common:
+    dependencies: com.lihaoyi::os-lib:0.11.4
     platform:
       name: jvm
     scala:

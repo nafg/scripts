@@ -1,0 +1,1 @@
+git-auto-reword = "echo $MISE_TASK_DIR; bleep --directory $MISE_TASK_DIR run gitAutoReword"

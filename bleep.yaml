@@ -1,0 +1,23 @@
+$schema: https://raw.githubusercontent.com/oyvindberg/bleep/master/schema.json
+$version: 0.0.12
+jvm:
+  name: graalvm-java17:22.3.1
+projects:
+  testIndex:
+    dependencies:
+    - com.googlecode.lanterna:lanterna:3.2.0-alpha1
+    - com.lihaoyi::fansi:0.5.0
+    - com.lihaoyi::os-lib:0.9.1
+    - com.olvind.tui::tui:0.0.7
+    - dev.zio::zio-streams:2.1.19
+    extends: template-common
+    platform:
+      mainClass: testIndex
+templates:
+  template-common:
+    platform:
+      name: jvm
+    scala:
+      options: -encoding utf8 -feature -unchecked
+      strict: true
+      version: 3.7.1

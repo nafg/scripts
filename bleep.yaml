@@ -5,9 +5,9 @@ jvm:
 projects:
   gitAutoReword:
     dependencies:
-      - com.lihaoyi::requests:0.8.0
-      - com.lihaoyi::upickle:3.1.3
-      - com.monovore::decline:2.5.0
+    - com.lihaoyi::requests:0.9.0
+    - com.lihaoyi::upickle:4.2.1
+    - com.monovore::decline:2.5.0
     extends: template-common
     platform:
       mainClass: GitAutoReword
@@ -26,6 +26,6 @@ templates:
     platform:
       name: jvm
     scala:
-      options: -encoding utf8 -feature -unchecked -source:3.4-migration -rewrite
+      options: -encoding utf8 -feature -rewrite -source:3.4-migration -unchecked
       strict: true
       version: 3.7.1

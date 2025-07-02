@@ -51,7 +51,7 @@ object GitAutoReword {
 
     val commit = args(0)
 
-    // Get API key from environment
+    // Get API key from the environment
     val apiKey = sys.env.getOrElse(
       "OPENAI_API_KEY", {
         System.err.println("Error: OPENAI_API_KEY environment variable not set")
@@ -60,7 +60,9 @@ object GitAutoReword {
     )
 
     println("Current commit message:")
-    Try(os.proc("git", "show", commit).call().out.trim()) match {
+    Try(
+      os.proc("git", "show", "--color=always", commit).call().out.trim()
+    ) match {
       case Success(out) => println(out)
       case Failure(ex)  =>
         System.err.println(s"ERROR: git show failed: ${ex.getMessage}")

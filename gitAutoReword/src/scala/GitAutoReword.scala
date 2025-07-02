@@ -1,6 +1,6 @@
 import scala.sys.process._
-import scala.util.{Failure, Success, Try}
 
+import requests.RequestAuth
 import upickle.default._
 
 object GitAutoReword {
@@ -43,6 +43,15 @@ object GitAutoReword {
     else defaultSystemPrompt
   }
 
+  private def exec(parts: os.Shellable*): String =
+    try os.proc(parts*).call().out.trim()
+    catch
+      case e: Throwable =>
+        System.err.println(
+          s"Error running ${parts.flatMap(_.value).mkString(" ")}: " + e.getMessage
+        )
+        sys.exit(1)
+
   def main(args: Array[String]): Unit = {
     if (args.length != 1) {
       System.err.println("Usage: git-auto-reword <commit-sha>")
@@ -54,40 +63,24 @@ object GitAutoReword {
     // Get API key from the environment
     val apiKey = sys.env.getOrElse(
       "OPENAI_API_KEY", {
-        System.err.println("Error: OPENAI_API_KEY environment variable not set")
+        System.err.println(
+          "Error: OPENAI_API_KEY environment variable not set"
+        )
         sys.exit(1)
       }
     )
 
     println("Current commit message:")
-    Try(
-      os.proc("git", "show", "--color=always", commit).call().out.trim()
-    ) match {
-      case Success(out) => println(out)
-      case Failure(ex)  =>
-        System.err.println(s"ERROR: git show failed: ${ex.getMessage}")
-        sys.exit(1)
-    }
+    println(exec("git", "show", "--color=always", commit))
 
-    val diff = Try(
-      os.proc("git", "show", commit, "--format=").call().out.trim()
-    ) match {
-      case Success(d)  => d
-      case Failure(ex) =>
-        System.err.println(s"ERROR: git show diff failed: ${ex.getMessage}")
-        sys.exit(1)
-    }
+    val diff = exec("git", "show", commit, "--format=")
 
     // Get repo info for context
-    val repoName = Try(
-      os.proc("git", "config", "--get", "remote.origin.url")
-        .call()
-        .out
-        .trim()
+    val repoName =
+      exec("git", "config", "--get", "remote.origin.url")
         .split("/")
         .last
         .stripSuffix(".git")
-    ).getOrElse("repository")
 
     // Request commit message from OpenAI API
     def callOpenAIChatCompletion(
@@ -103,25 +96,19 @@ object GitAutoReword {
         "temperature" -> temperature,
         "response_format" -> ujson.Obj("type" -> responseFormat)
       )
-      val response = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers = Map(
-          "Authorization" -> s"Bearer $apiKey",
-          "Content-Type" -> "application/json"
-        ),
-        data = requestBody,
-        readTimeout = 30_000
-      )
-      if (response.statusCode != 200) {
-        throw new Exception(
-          s"API request failed with status ${response.statusCode}: ${response.text()}"
+      val response =
+        requests.post(
+          "https://api.openai.com/v1/chat/completions",
+          auth = RequestAuth.Bearer(apiKey),
+          headers = Map("Content-Type" -> "application/json"),
+          data = requestBody,
+          readTimeout = 30_000
         )
-      }
       val responseJson = ujson.read(response.text())
       responseJson("choices")(0)("message")("content").str.trim()
     }
 
-    val msg = Try {
+    val msg = {
       val messages = ujson.Arr(
         ujson.Obj("role" -> "system", "content" -> getSystemPrompt),
         ujson.Obj(
@@ -130,11 +117,6 @@ object GitAutoReword {
         )
       )
       callOpenAIChatCompletion(apiKey, messages)
-    } match {
-      case Success(content) => content
-      case Failure(ex)      =>
-        System.err.println(s"ERROR: OpenAI API call failed: ${ex.getMessage}")
-        sys.exit(1)
     }
 
     println("Revising to:")

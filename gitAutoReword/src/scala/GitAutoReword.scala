@@ -8,33 +8,31 @@ object GitAutoReword {
   case class ChatMessage(role: String, content: String)
   case class ResponseChoice(message: ChatMessage, index: Int)
   case class ChatCompletionResponse(id: String, choices: Seq[ResponseChoice])
+  case class CommitMessage(subject: String, body: String)
 
   // JSON readers for parsing OpenAI response
   implicit val chatMessageRW: ReadWriter[ChatMessage] = macroRW
   implicit val responseChoiceRW: ReadWriter[ResponseChoice] = macroRW
   implicit val chatCompletionResponseRW: ReadWriter[ChatCompletionResponse] =
     macroRW
+  implicit val commitMessageRW: ReadWriter[CommitMessage] = macroRW
 
   private val defaultSystemPrompt = """
-    |You are an expert at writing Git commit messages following conventional commits format.
+    |You are an expert at writing Git commit messages.
     |Analyze the diff and create a clear, concise commit message that explains:
-    |1. WHAT was changed (in the summary line)
+    |1. WHAT was changed (in the subject line)
     |2. WHY it was changed (in the body)
-    |3. Any significant implementation details if relevant
     |
-    |Format:
-    |- First line: <type>[(scope)]: <short summary> (under 72 chars)
-    |  * Types: feat, fix, docs, style, refactor, test, chore
-    |  * Scope is optional, e.g. (api), (cli), (config)
-    |  * Use lowercase and present tense: "add" not "added" or "adds"
-    |- Blank line
-    |- Body text (wrapped at 72 chars)
-    |- Blank line if needed
-    |- Footer (e.g., breaking changes, references to issues)
+    |Output a JSON object with the following structure:
+    |{
+    |  "subject": "<type>[(scope)]: <short summary>",
+    |  "body": "<detailed explanation>"
+    |}
     |
-    |ONLY output the commit message, nothing else.
-    |Do NOT include explanations of your thought process or inability to find files.
-    |Start directly with the commit message content.
+    |The subject line should follow conventional commits format (under 72 chars).
+    |The body should be wrapped at 72 characters if necessary.
+    |
+    |ONLY output the JSON object.
     """.stripMargin
 
   private def getSystemPrompt: String = {
@@ -86,15 +84,14 @@ object GitAutoReword {
     def callOpenAIChatCompletion(
         apiKey: String,
         messages: ujson.Arr,
-        model: String = "gpt-4",
-        temperature: Double = 0.5,
-        responseFormat: String = "text"
+        model: String = "gpt-4-turbo",
+        temperature: Double = 0.5
     ): String = {
       val requestBody = ujson.Obj(
         "model" -> model,
         "messages" -> messages,
         "temperature" -> temperature,
-        "response_format" -> ujson.Obj("type" -> responseFormat)
+        "response_format" -> ujson.Obj("type" -> "json_object")
       )
       val response =
         requests.post(
@@ -102,12 +99,14 @@ object GitAutoReword {
           auth = RequestAuth.Bearer(apiKey),
           headers = Map("Content-Type" -> "application/json"),
           data = requestBody,
-          readTimeout = 30_000
+          readTimeout = 60_000
         )
-      read[ChatCompletionResponse](response.text()).choices.head.message.content.trim
+      read[ChatCompletionResponse](
+        response.text()
+      ).choices.head.message.content.trim
     }
 
-    val msg = {
+    val msgJson = {
       val messages = ujson.Arr(
         ujson.Obj("role" -> "system", "content" -> getSystemPrompt),
         ujson.Obj(
@@ -118,11 +117,20 @@ object GitAutoReword {
       callOpenAIChatCompletion(apiKey, messages)
     }
 
+    val commitMessage = read[CommitMessage](msgJson)
+
     println("Revising to:")
-    println(msg)
+    println(commitMessage.subject.linesIterator.map("  " + _).mkString("\n"))
+    println()
+    println(commitMessage.body.linesIterator.map("  " + _).mkString("\n"))
+
+    println()
 
     // Split by paragraphs and apply to git revise
-    val paragraphs = msg.split("\n\n+").map(_.trim).filter(_.nonEmpty)
+    val paragraphs = Seq(commitMessage.subject) ++ commitMessage.body
+      .split("\n\n+")
+      .map(_.trim)
+      .filter(_.nonEmpty)
     val cmd = Seq("git", "revise", "--no-index", commit) ++
       paragraphs.flatMap(p => Seq("-m", p))
     sys.exit(Process(cmd).!)

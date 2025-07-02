@@ -104,8 +104,7 @@ object GitAutoReword {
           data = requestBody,
           readTimeout = 30_000
         )
-      val responseJson = ujson.read(response.text())
-      responseJson("choices")(0)("message")("content").str.trim()
+      read[ChatCompletionResponse](response.text()).choices.head.message.content.trim
     }
 
     val msg = {

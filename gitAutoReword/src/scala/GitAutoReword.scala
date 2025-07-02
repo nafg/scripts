@@ -1,21 +1,7 @@
-import scala.sys.process._
-
-import requests.RequestAuth
 import upickle.default._
 
 object GitAutoReword {
-  // Case classes for JSON parsing
-  case class ChatMessage(role: String, content: String)
-  case class ResponseChoice(message: ChatMessage, index: Int)
-  case class ChatCompletionResponse(id: String, choices: Seq[ResponseChoice])
-  case class CommitMessage(subject: String, body: String)
-
-  // JSON readers for parsing OpenAI response
-  implicit val chatMessageRW: ReadWriter[ChatMessage] = macroRW
-  implicit val responseChoiceRW: ReadWriter[ResponseChoice] = macroRW
-  implicit val chatCompletionResponseRW: ReadWriter[ChatCompletionResponse] =
-    macroRW
-  implicit val commitMessageRW: ReadWriter[CommitMessage] = macroRW
+  private case class CommitMessage(subject: String, body: String) derives Reader
 
   // Always use the built-in prompt to enforce JSON output. Any optional
   // instructions file is added as a SECOND system message, so it cannot
@@ -92,32 +78,6 @@ object GitAutoReword {
         .last
         .stripSuffix(".git")
 
-    // Request commit message from OpenAI API
-    def callOpenAIChatCompletion(
-        apiKey: String,
-        messages: ujson.Arr,
-        model: String = "gpt-4-turbo",
-        temperature: Double = 0.5
-    ): String = {
-      val requestBody = ujson.Obj(
-        "model" -> model,
-        "messages" -> messages,
-        "temperature" -> temperature,
-        "response_format" -> ujson.Obj("type" -> "json_object")
-      )
-      val response =
-        requests.post(
-          "https://api.openai.com/v1/chat/completions",
-          auth = RequestAuth.Bearer(apiKey),
-          headers = Map("Content-Type" -> "application/json"),
-          data = requestBody,
-          readTimeout = 60_000
-        )
-      read[ChatCompletionResponse](
-        response.text()
-      ).choices.head.message.content.trim
-    }
-
     val msgJson = {
       val messagesSeq: Seq[ujson.Value] =
         Seq(ujson.Obj("role" -> "system", "content" -> systemPrompt)) ++
@@ -129,7 +89,7 @@ object GitAutoReword {
             )
           )
       val messages = ujson.Arr(messagesSeq*)
-      callOpenAIChatCompletion(apiKey, messages)
+      OpenAI.callOpenAIChatCompletion(apiKey, messages)
     }
 
     val commitMessage = read[CommitMessage](msgJson)
@@ -146,8 +106,14 @@ object GitAutoReword {
       .split("\n\n+")
       .map(_.trim)
       .filter(_.nonEmpty)
-    val cmd = Seq("git", "revise", "--no-index", commit) ++
-      paragraphs.flatMap(p => Seq("-m", p))
-    sys.exit(Process(cmd).!)
+
+    val _ =
+      os.proc(
+        "git",
+        "revise",
+        "--no-index",
+        commit,
+        paragraphs.flatMap(p => Seq("-m", p))
+      ).call(stdout = os.Inherit)
   }
 }

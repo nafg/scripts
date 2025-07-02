@@ -107,7 +107,8 @@ object GitAutoReword {
           "Authorization" -> s"Bearer $apiKey",
           "Content-Type" -> "application/json"
         ),
-        data = requestBody
+        data = requestBody,
+        readTimeout = 30_000
       )
       if (response.statusCode != 200) {
         throw new Exception(

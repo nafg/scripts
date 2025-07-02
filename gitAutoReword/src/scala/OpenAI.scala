@@ -14,7 +14,7 @@ object OpenAI {
   def callOpenAIChatCompletion(
       apiKey: String,
       messages: ujson.Arr,
-      model: String = "gpt-4-turbo",
+      model: String = "gpt-4.1-mini",
       temperature: Double = 0.5
   ): String = {
     val requestBody = ujson.Obj(

@@ -9,6 +9,7 @@ import scala.concurrent.Future
 import scala.util.boundary
 import scala.util.boundary.break
 
+
 //@main def testIndex =
 //  val sessionName = "mySession"
 //  try
@@ -28,7 +29,7 @@ def md5(s: String): String =
   md.digest(s.getBytes).map("%02x".format(_)).mkString
 
 class Buffer:
-  private val q = new LinkedTransferQueue[String]()
+  private val q   = new LinkedTransferQueue[String]()
   private var buf = Seq.empty[String]
 
   def println(s: String): Unit = q.put(s)
@@ -45,13 +46,13 @@ class Buffer:
 
 @main
 def testIndex(command: String*): Unit =
-  val srcDir = os.pwd
-  val name = srcDir.last + "-" + md5(srcDir.toString).take(4)
-  val tmpDir = os.root / "var" / "tmp" / "testIndex"
-  val checkoutDir = tmpDir / (name + "-checkout")
-  val testingDir = tmpDir / (name + "-testing")
+  val srcDir         = os.pwd
+  val name           = srcDir.last + "-" + md5(srcDir.toString).take(4)
+  val tmpDir         = os.root / "var" / "tmp" / "testIndex"
+  val checkoutDir    = tmpDir / (name + "-checkout")
+  val testingDir     = tmpDir / (name + "-testing")
   val checkoutOutput = tmpDir / (checkoutDir.last + ".log")
-  val testingOutput = tmpDir / (testingDir.last + ".log")
+  val testingOutput  = tmpDir / (testingDir.last + ".log")
 
   os.remove.all(checkoutOutput)
   os.remove.all(testingOutput)
@@ -72,7 +73,7 @@ def testIndex(command: String*): Unit =
     os.write.append(checkoutOutput, line + "\n")
     checkoutOutputQueue.println(line)
   }
-  val testingProcessOutput = os.ProcessOutput.Readlines { line =>
+  val testingProcessOutput  = os.ProcessOutput.Readlines { line =>
     val str = line.replace(testingDir.toString, srcDir.toString)
     os.write.append(testingOutput, str + "\n")
     testingOutputQueue.println(str)
@@ -154,9 +155,9 @@ def testIndex(command: String*): Unit =
     tg.fill(' ')
     for (
       (line, n) <- buf
-        .dropRight(scrollUp)
-        .takeRight(tg.getSize.getRows)
-        .zipWithIndex
+                     .dropRight(scrollUp)
+                     .takeRight(tg.getSize.getRows)
+                     .zipWithIndex
     )
       tg.putCSIStyledString(0, n, line)
 
@@ -164,7 +165,7 @@ def testIndex(command: String*): Unit =
     val screen = terminalFactory.createScreen()
     try
       screen.startScreen()
-      val tg = screen.newTextGraphics()
+      val tg       = screen.newTextGraphics()
       //    screen.getTerminal.addResizeListener { (_, newSize) =>
       //      tg.putString(0, 0, s"Resized to $newSize", SGR.BOLD)
       //      screen.refresh()
@@ -193,8 +194,8 @@ def testIndex(command: String*): Unit =
             screen.doResizeIfNecessary()
             val size = screen.getTerminalSize
             val rows = size.getRows - 1
-            val i = 20
-            val tg1 =
+            val i    = 20
+            val tg1  =
               tg.newTextGraphics(
                 TerminalPosition.TOP_LEFT_CORNER,
                 tg.getSize.withRows(i - 1)
@@ -206,7 +207,7 @@ def testIndex(command: String*): Unit =
               i + 2,
               Symbols.SINGLE_LINE_HORIZONTAL
             )
-            val tg2 =
+            val tg2  =
               tg.newTextGraphics(
                 TerminalPosition.TOP_LEFT_CORNER.withRelativeRow(i),
                 tg.getSize.withRows(rows - i)

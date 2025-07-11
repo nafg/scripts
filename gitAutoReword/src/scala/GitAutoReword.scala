@@ -6,6 +6,7 @@ import cats.implicits.catsSyntaxTuple2Semigroupal
 import com.monovore.decline.{CommandApp, Opts}
 import upickle.default.*
 
+
 private case class CommitMessage(subject: String, body: String) derives Reader
 
 // Always use the built-in prompt to enforce JSON output. Any optional
@@ -56,7 +57,7 @@ object GitAutoReword
     extends CommandApp(
       name = "git-auto-reword",
       header = "Auto reword git commit messages",
-      main = {
+      main =
         (
           Opts
             .option[Path](
@@ -138,5 +139,4 @@ object GitAutoReword
               ).call(stdout = os.Inherit)
           }
         }
-      }
     )

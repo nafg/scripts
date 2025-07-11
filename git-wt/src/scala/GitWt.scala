@@ -1,9 +1,8 @@
 import java.nio.file.Paths
+import java.security.MessageDigest
 
 import zio.*
 import zio.cli.*
-import zio.cli.HelpDoc.Span.text
-import zio.process.Command as ZCommand
 
 
 object GitWt extends ZIOCliDefault {
@@ -24,179 +23,124 @@ object GitWt extends ZIOCliDefault {
       case (acc, _)                                           => acc
     }.mkString.stripPrefix("-").stripSuffix("-")
 
-  private def exec(
-    command: String,
-    args: String*
-  ): ZIO[Any, Throwable, String] = ZCommand(command, args*).string
+  private def sha1Hash(s: String): String = {
+    val md = MessageDigest.getInstance("SHA-1")
+    md.digest(s.getBytes("UTF-8")).map("%02x".format(_)).mkString
+  }
 
-  override val cliApp =
-    CliApp.make(
-      name = "git-wt",
-      version = "0.1.0",
-      summary = text("A lightweight worktree manager"),
-      command = Command("git-wt", Options.none)
-        .subcommands(
-          Command("new", Args.text("branch")).map(Subcommand.New.apply),
-          Command("add", Args.text("branch-or-pr").*).map(Subcommand.Add.apply),
-          Command("path", Args.text("branch")).map(Subcommand.Path.apply),
-          Command("prune").map(_ => Subcommand.Prune)
-        )
-    ) {
-      case Subcommand.New(branch)   =>
-        for {
-          gitRoot      <- exec("git", "rev-parse", "--show-toplevel")
-          repoName      = Paths.get(gitRoot).getFileName.toString
-          dirHash      <- exec("git", "hash-object", "--stdin", gitRoot)
-          worktreesRoot = Paths.get(
-                            sys.props("user.home"),
-                            ".worktrees",
-                            s"$repoName-${dirHash.take(7)}"
-                          )
-          branchSlug    = slugify(branch)
-          worktreePath  = worktreesRoot.resolve(branchSlug)
-          _            <- ZIO.succeed(os.makeDir.all(os.Path(worktreesRoot.toFile)))
-          _            <- exec("git", "branch", branch, "HEAD")
-          _            <- exec("git", "worktree", "add", worktreePath.toString, branch)
-          _            <- Console.printLine(worktreePath.toString)
-        } yield ()
-      case Subcommand.Add(branches) =>
-        for {
-          gitRoot      <- exec("git", "rev-parse", "--show-toplevel")
-          repoName      = Paths.get(gitRoot).getFileName.toString
-          dirHash      <- exec("git", "hash-object", "--stdin", gitRoot)
-          worktreesRoot = Paths.get(
-                            sys.props("user.home"),
-                            ".worktrees",
-                            s"$repoName-${dirHash.take(7)}"
-                          )
-          _            <- ZIO.succeed(os.makeDir.all(os.Path(worktreesRoot.toFile)))
-          _            <- ZIO.foreach(branches) { arg =>
-                            val isPr         = arg.forall(_.isDigit)
-                            val fetchAndDest = if (isPr) {
+  def impl: ((Git, Subcommand)) => Task[Unit] = {
+    case git -> Subcommand.New(branch)   =>
+      for {
+        gitRoot      <- git.repository.root
+        repoName      = gitRoot.getFileName.toString
+        dirHash       = sha1Hash(gitRoot.toString)
+        worktreesRoot = Paths.get(sys.props("user.home"), ".worktrees", s"$repoName-${dirHash.take(7)}")
+        branchSlug    = slugify(branch)
+        worktreePath  = worktreesRoot.resolve(branchSlug)
+        _            <- ZIO.attempt(os.makeDir.all(os.Path(worktreePath)))
+        _            <- git.branches.create(branch)
+        worktree     <- git.worktrees.add(worktreePath.toString, branch)
+        _            <- Console.printLine(worktree.path.toString)
+      } yield ()
+    case git -> Subcommand.Add(branches) =>
+      for {
+        gitRoot      <- git.repository.root
+        repoName      = gitRoot.getFileName.toString
+        dirHash       = sha1Hash(gitRoot.toString)
+        worktreesRoot = Paths.get(sys.props("user.home"), ".worktrees", s"$repoName-${dirHash.take(7)}")
+        _            <- ZIO.succeed(os.makeDir.all(os.Path(worktreesRoot.toFile)))
+        _            <- ZIO.foreachDiscard(branches) { arg =>
+                          val isPr         = arg.forall(_.isDigit)
+                          val fetchAndDest =
+                            if (isPr) {
                               val prId     = arg
                               val prBranch = s"pr-$prId"
-                              exec("git", "fetch", "origin", s"pull/$prId/head:$prBranch")
-                                .orElse(
-                                  exec(
-                                    "git",
-                                    "fetch",
-                                    "origin",
-                                    s"merge-requests/$prId/head:$prBranch"
-                                  )
-                                )
-                                .as(prBranch)
+                              git.remotes.fetchPullRequest(prId, prBranch)
                                 .tapError { e =>
                                   Console
                                     .printLine(s"Failed to fetch PR $prId: ${e.getMessage}")
                                     .ignore
                                 }
-                            } else {
-                              exec("git", "fetch", "origin", arg)
+                            } else
+                              git.remotes.fetch(arg)
                                 .tapError { e =>
                                   Console
                                     .printLine(s"Failed to fetch branch $arg: ${e.getMessage}")
                                     .ignore
                                 }
-                                .as(arg)
-                            }
+                                .as(Git.Branch(arg))
 
-                            fetchAndDest.flatMap { dest =>
-                              val branchSlug   = slugify(dest)
-                              val worktreePath = worktreesRoot.resolve(branchSlug)
-                              exec("git", "worktree", "add", worktreePath.toString, dest)
-                                .map { _ =>
-                                  Console.printLine(worktreePath.toString)
-                                }
-                                .tapError { e =>
-                                  Console
-                                    .printLine(
-                                      s"Failed to add worktree for $dest: ${e.getMessage}"
-                                    )
-                                    .ignore
-                                }
-                            }.ignore // Ignore errors for individual branches to continue processing others
-                          }
-        } yield ()
-      case Subcommand.Path(branch)  =>
-        for {
-          output <- exec("git", "worktree", "list", "--porcelain")
-          lines   = output.split("\n")
-          path   <- ZIO.succeed(lines.sliding(2).collectFirst {
-                      case Array(pathLine, branchLine)
-                          if pathLine.startsWith("worktree ") && branchLine.startsWith(
-                            "branch "
-                          ) && branchLine.stripPrefix("branch ") == branch =>
-                        pathLine.stripPrefix("worktree ")
-                    })
-          _      <- path match {
-                      case Some(p) => Console.printLine(p)
-                      case None    =>
-                        Console.printLine(s"No worktree found for branch: $branch")
-                    }
-        } yield ()
-      case Subcommand.Prune         =>
-        for {
-          output   <- exec("git", "worktree", "list", "--porcelain")
-          worktrees = output
-                        .split("\n")
-                        .grouped(2)
-                        .collect {
-                          case Array(pathLine, branchLine)
-                              if pathLine.startsWith("worktree ") && branchLine.startsWith(
-                                "branch "
-                              ) =>
-                            (
-                              pathLine.stripPrefix("worktree "),
-                              branchLine.stripPrefix("branch ")
-                            )
-                        }
-                        .toList
-          _        <- ZIO.foreach(worktrees) { case (wtPath, branch) =>
-                        val isStale = for {
-                          merged          <- exec("git", "-C", wtPath, "branch", "--merged")
-                                               .map(_.contains(branch))
-                                               .orElse(ZIO.succeed(false))
-                          missingUpstream <- exec(
-                                               "git",
-                                               "-C",
-                                               wtPath,
-                                               "rev-parse",
-                                               "--symbolic-full-name",
-                                               "--remotes",
-                                               branch
-                                             ).map(_ => false).orElse(ZIO.succeed(true))
-                        } yield merged || missingUpstream
+                          fetchAndDest.flatMap { branch =>
+                            val branchSlug   = slugify(branch.name)
+                            val worktreePath = worktreesRoot.resolve(branchSlug)
 
-                        isStale.flatMap { stale =>
-                          if (stale) {
-                            for {
-                              diffQuiet       <- exec("git", "-C", wtPath, "diff", "--quiet")
-                                                   .map(_ => true)
-                                                   .orElse(ZIO.succeed(false))
-                              diffCachedQuiet <- exec(
-                                                   "git",
-                                                   "-C",
-                                                   wtPath,
-                                                   "diff",
-                                                   "--cached",
-                                                   "--quiet"
-                                                 ).map(_ => true).orElse(ZIO.succeed(false))
-                              _               <-
-                                if (diffQuiet && diffCachedQuiet) {
-                                  ZIO
-                                    .succeed(os.remove.all(os.Path(wtPath)))
-                                    .flatMap(_ => Console.printLine(s"Deleted $wtPath"))
-                                } else {
-                                  Console.printLine(
-                                    s"Skipped (uncommitted changes): $branch at $wtPath"
-                                  )
-                                }
-                            } yield ()
-                          } else {
-                            ZIO.unit
-                          }
+                            (git.worktrees.add(worktreePath.toString, branch.name) *>
+                              Console.printLine(worktreePath.toString))
+                              .tapError { e =>
+                                Console.printLine(s"Failed to add worktree for ${branch.name}: ${e.getMessage}")
+                                  .ignore
+                              }
+                          }.ignore
                         }
-                      }
-        } yield ()
-    }
+      } yield ()
+    case git -> Subcommand.Path(branch)  =>
+      for {
+        worktrees <- git.worktrees.list
+        worktree   = worktrees.find(_.branch.name == branch)
+        _         <- worktree match {
+                       case Some(w) => Console.printLine(w.path.toString)
+                       case None    => Console.printLine(s"No worktree found for branch: $branch")
+                     }
+      } yield ()
+    case git -> Subcommand.Prune         =>
+      for {
+        worktrees <- git.worktrees.list
+        _         <- ZIO.foreachDiscard(worktrees) { worktree =>
+                       for {
+                         merged          <- git.branches.listMerged(
+                                              worktree.path.toString
+                                            ).map(_.exists(_.name == worktree.branch.name)).orElseSucceed(false)
+                         missingUpstream <- Git(worktree.path)
+                                              .remotes
+                                              .getSymbolicFullName(worktree.branch.name)
+                                              .isFailure
+                         _               <- ZIO.when(merged || missingUpstream) {
+                                              Git(worktree.path).status.isClean
+                                                .flatMap { isClean =>
+                                                  if (isClean)
+                                                    ZIO.attempt(os.remove.all(os.Path(worktree.path))) *>
+                                                      Console.printLine(s"Deleted ${worktree.path}")
+                                                  else
+                                                    Console.printLine(
+                                                      s"Skipped (uncommitted changes):" +
+                                                        s" ${worktree.branch.name} at ${worktree.path}"
+                                                    )
+                                                }
+                                            }
+
+                       } yield ()
+                     }
+      } yield ()
+  }
+
+  override val cliApp =
+    CliApp.make(
+      name = "git-wt",
+      version = "0.1.0",
+      summary = HelpDoc.Span.text("A lightweight worktree manager"),
+      command =
+        Command("git-wt", Options.directory("cwd", Exists.Yes).withDefault(Paths.get(".")) ?? "Working directory")
+          .withHelp("git-wt")
+          .map(new Git(_))
+          .subcommands(
+            Command("new", Args.text("branch") ?? "New branch").map(Subcommand.New.apply)
+              .withHelp("git-wt new BRANCH") |
+              Command("add", Args.text("branch-or-pr").* ?? "Existing branch, PR, or MR").map(Subcommand.Add.apply)
+                .withHelp("git-wt add BRANCH...") |
+              Command("path", Args.text("branch") ?? "Existing branch").map(Subcommand.Path.apply) |
+              Command("prune").as(Subcommand.Prune)
+          )
+    )(impl(_).catchAll { e =>
+      Console.printLine(e.getMessage) *> exit(ExitCode.failure)
+    })
 }

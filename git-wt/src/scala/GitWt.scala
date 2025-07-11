@@ -15,21 +15,14 @@ object GitWt extends ZIOCliDefault {
     case object Prune                            extends Subcommand
   }
 
-  private def slugify(s: String): String = {
-    val sb              = new StringBuilder
-    var lastCharWasDash = false
-    for (c <- s)
-      if (c.isLetterOrDigit || c == '.' || c == '_') {
-        sb.append(c)
-        lastCharWasDash = false
-      } else if (c == '/' || c.isWhitespace) {
-        if (!lastCharWasDash) {
-          sb.append('-')
-          lastCharWasDash = true
-        }
-      }
-    sb.toString.stripPrefix("-").stripSuffix("-")
-  }
+  private def slugify(s: String): String =
+    s.foldLeft(List.empty[Char]) {
+      case (acc, '/') if !acc.endsWith("-")                   => acc :+ '-'
+      case (acc, ch) if !acc.endsWith("-") && ch.isWhitespace => acc :+ '-'
+      case (acc, ch @ ('.' | '_'))                            => acc :+ ch
+      case (acc, ch) if ch.isLetterOrDigit                    => acc :+ ch
+      case (acc, _)                                           => acc
+    }.mkString.stripPrefix("-").stripSuffix("-")
 
   private def exec(
     command: String,

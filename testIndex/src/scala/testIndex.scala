@@ -23,7 +23,6 @@ import scala.util.boundary.break
 //  finally
 //    os.proc("tmux", "kill-session", "-t", sessionName).call()
 
-
 def md5(s: String): String =
   val md = java.security.MessageDigest.getInstance("MD5")
   md.digest(s.getBytes).map("%02x".format(_)).mkString
@@ -35,14 +34,14 @@ class Buffer:
   def println(s: String): Unit = q.put(s)
 
   def run(): Unit =
-    Iterator.continually(q.take())
+    Iterator
+      .continually(q.take())
       .foreach { line =>
         buf = buf :+ line
         Thread.`yield`()
       }
 
   def buffer: Seq[String] = buf
-
 
 @main
 def testIndex(command: String*): Unit =
@@ -65,7 +64,6 @@ def testIndex(command: String*): Unit =
   Future:
     testingOutputQueue.run()
 
-
   //  println(srcDir)
   //  println(checkoutOutput)
   //  println(testingOutput)
@@ -80,7 +78,6 @@ def testIndex(command: String*): Unit =
     testingOutputQueue.println(str)
   }
 
-
   def doSync(): Unit =
     while (true)
       print("Waiting...\r")
@@ -88,20 +85,34 @@ def testIndex(command: String*): Unit =
       print("          \n")
       os.remove.all(checkoutDir)
       os.proc("git", "checkout-index", "-a", "-f", s"--prefix=$checkoutDir/")
-        .call(stdout = checkoutProcessOutput, mergeErrIntoOut = true, check = false)
+        .call(
+          stdout = checkoutProcessOutput,
+          mergeErrIntoOut = true,
+          check = false
+        )
       os.proc(
         "rsync",
         "-rci",
         "--delete",
-        "--exclude", "target*",
-        "--exclude", "project/project",
-        "--exclude", "out",
-        "--exclude", "*.jvm",
-        "--exclude", "*.js",
-        "--exclude", ".bleep",
+        "--exclude",
+        "target*",
+        "--exclude",
+        "project/project",
+        "--exclude",
+        "out",
+        "--exclude",
+        "*.jvm",
+        "--exclude",
+        "*.js",
+        "--exclude",
+        ".bleep",
         checkoutDir.toString + "/",
         testingDir.toString + "/"
-      ).call(stdout = checkoutProcessOutput, mergeErrIntoOut = true, check = false)
+      ).call(
+        stdout = checkoutProcessOutput,
+        mergeErrIntoOut = true,
+        check = false
+      )
     end while
 
   var testProcess: Option[os.SubProcess] = None
@@ -138,11 +149,15 @@ def testIndex(command: String*): Unit =
   //        f"$i%10s  " + AnsiColor.RED + Iterator.fill(50)(Random.nextPrintableChar()).mkString + AnsiColor.RESET
   //      checkoutOutputQueue.println(str)
 
-
   def renderPane(tg: TextGraphics, queue: Buffer, scrollUp: Int = 0): Unit =
     val buf = queue.buffer
     tg.fill(' ')
-    for ((line, n) <- buf.dropRight(scrollUp).takeRight(tg.getSize.getRows).zipWithIndex)
+    for (
+      (line, n) <- buf
+        .dropRight(scrollUp)
+        .takeRight(tg.getSize.getRows)
+        .zipWithIndex
+    )
       tg.putCSIStyledString(0, n, line)
 
   def useLanterna(): Unit = {
@@ -156,7 +171,8 @@ def testIndex(command: String*): Unit =
       //    }
       var scrollUp = 0
       boundary:
-        Iterator.continually(Option(screen.pollInput()))
+        Iterator
+          .continually(Option(screen.pollInput()))
           .foreach { input =>
             input.foreach { key =>
               val character = Option(key.getCharacter).map(_.charValue())
@@ -165,7 +181,8 @@ def testIndex(command: String*): Unit =
                 testProcess = None
                 break()
               else if key.getKeyType == KeyType.ArrowUp then
-                scrollUp = scrollUp + 1 min testingOutputQueue.buffer.length - screen.getTerminalSize.getRows
+                scrollUp =
+                  scrollUp + 1 min testingOutputQueue.buffer.length - screen.getTerminalSize.getRows
               else if key.getKeyType == KeyType.ArrowDown then
                 scrollUp = scrollUp - 1 max 0
               else if character.contains('r') then
@@ -178,18 +195,29 @@ def testIndex(command: String*): Unit =
             val rows = size.getRows - 1
             val i = 20
             val tg1 =
-              tg.newTextGraphics(TerminalPosition.TOP_LEFT_CORNER, tg.getSize.withRows(i - 1))
-            tg.drawLine(0, i, size.getColumns, i + 2, Symbols.SINGLE_LINE_HORIZONTAL)
+              tg.newTextGraphics(
+                TerminalPosition.TOP_LEFT_CORNER,
+                tg.getSize.withRows(i - 1)
+              )
+            tg.drawLine(
+              0,
+              i,
+              size.getColumns,
+              i + 2,
+              Symbols.SINGLE_LINE_HORIZONTAL
+            )
             val tg2 =
-              tg.newTextGraphics(TerminalPosition.TOP_LEFT_CORNER.withRelativeRow(i), tg.getSize.withRows(rows - i))
+              tg.newTextGraphics(
+                TerminalPosition.TOP_LEFT_CORNER.withRelativeRow(i),
+                tg.getSize.withRows(rows - i)
+              )
             renderPane(tg1, checkoutOutputQueue, 0)
             renderPane(tg2, testingOutputQueue, scrollUp)
             tg.putString(size.getColumns - 10, 0, s"($scrollUp)", SGR.BOLD)
             screen.refresh()
             Thread.`yield`()
           }
-    finally
-      screen.stopScreen()
+    finally screen.stopScreen()
   }
 
   useLanterna()

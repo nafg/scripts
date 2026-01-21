@@ -143,14 +143,12 @@ final case class Git(cwd: Path) {
 
     /** Checks if there are any uncommitted changes in the working directory */
     def hasUncommittedChanges: ZIO[Any, Nothing, Boolean] =
-      exec("git", "diff", "--quiet")
-        .map(_ => false)
+      exec("git", "diff", "--quiet").as(false)
         .catchAll(_ => ZIO.succeed(true))
 
     /** Checks if there are any staged but uncommitted changes */
     def hasStagedUncommittedChanges: ZIO[Any, Nothing, Boolean] =
-      exec("git", "diff", "--cached", "--quiet")
-        .map(_ => false)
+      exec("git", "diff", "--cached", "--quiet").as(false)
         .catchAll(_ => ZIO.succeed(true))
 
     /** Checks if the working directory is clean (no uncommitted or staged changes) */

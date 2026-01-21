@@ -1,1 +1,20 @@
 git-auto-reword = "bleep --directory $MISE_TASK_DIR run gitAutoReword -- --dir $MISE_ORIGINAL_CWD"
+
+[git-wt]
+run = "bleep --directory $MISE_TASK_DIR run git-wt -- --cwd $MISE_ORIGINAL_CWD"
+description = "A lightweight worktree manager for the 'git wt' alias"
+usage = '''
+arg "command" help="Command to run (new, add, path, or prune)"
+arg "[args...]" help="Arguments for the command"
+'''
+
+[git-wt-fish-completion]
+run = '''
+cp $MISE_TASK_DIR/git-wt-completion.fish ~/.config/fish/completions/git-wt.fish
+chmod +x ~/.config/fish/completions/git-wt.fish
+
+# Also create a more standard Fish completion filename format
+cp $MISE_TASK_DIR/git-wt-completion.fish ~/.config/fish/completions/git_wt.fish
+chmod +x ~/.config/fish/completions/git_wt.fish
+'''
+description = "Install Fish shell completions for 'git wt' using ZIO CLI's completion mechanism"

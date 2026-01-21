@@ -88,11 +88,20 @@ object GitAutoReword
             val diff = exec("git", "show", commit, "--format=")
 
             // Get repo info for context
-            val repoName =
-              exec("git", "config", "--get", "remote.origin.url")
-                .split("/")
-                .last
-                .stripSuffix(".git")
+            val repoNameStr =
+              try
+                "Repository: " +
+                  os.proc("git", "config", "get", "remote.origin.url")
+                    .call()
+                    .out
+                    .trim()
+                    .split("/")
+                    .last
+                    .stripSuffix(".git")
+              catch
+                case os.SubprocessException(_) =>
+                  "Directory: " +
+                    os.pwd.last
 
             val msgJson =
               OpenAI.callOpenAIChatCompletion(apiKey)(
@@ -100,7 +109,7 @@ object GitAutoReword
                 extraInstructionsMessage,
                 OpenAI.ChatMessage(
                   role = "user",
-                  content = s"""Repository: $repoName
+                  content = s"""$repoNameStr
                        |
                        |Generate a commit message for this diff:
                        |

@@ -1,8 +1,6 @@
 import java.nio.file.Path
 
-import scala.collection.immutable.SortedMap
-
-import cats.implicits.catsSyntaxTuple2Semigroupal
+import cats.implicits.catsSyntaxTuple3Semigroupal
 import com.monovore.decline.{CommandApp, Opts}
 import upickle.default.*
 
@@ -65,22 +63,16 @@ object GitAutoReword
               "The git directory. Defaults to the current directory."
             )
             .withDefault(Path.of(".")),
-          Opts.argument[String]("commit").withDefault("HEAD")
-        ).mapN { (dir, commit) =>
-          os.dynamicPwd.withValue(os.FilePath(dir).resolveFrom(os.pwd)) {
-            sys.env
-              .to(SortedMap)
-              .foreach((k, v) => println(scala.io.AnsiColor.RESET + s"$k = $v"))
-
-            // Get API key from the environment
-            val apiKey = sys.env.getOrElse(
-              "OPENAI_API_KEY", {
-                System.err.println(
-                  "Error: OPENAI_API_KEY environment variable not set"
-                )
-                sys.exit(1)
-              }
+          Opts
+            .option[String](
+              "provider",
+              "Message provider: codex or openai. Defaults to codex."
             )
+            .withDefault(sys.env.getOrElse("GIT_AUTO_REWORD_PROVIDER", "codex")),
+          Opts.argument[String]("commit").withDefault("HEAD")
+        ).mapN { (dir, provider, commit) =>
+          os.dynamicPwd.withValue(os.FilePath(dir).resolveFrom(os.pwd)) {
+            val normalizedProvider = provider.toLowerCase
 
             println("Current commit message:")
             println(exec("git", "show", "--color=always", commit, "--"))
@@ -103,19 +95,38 @@ object GitAutoReword
                   "Directory: " +
                     os.pwd.last
 
-            val msgJson =
-              OpenAI.callOpenAIChatCompletion(apiKey)(
-                OpenAI.ChatMessage(role = "system", content = systemPrompt),
-                extraInstructionsMessage,
-                OpenAI.ChatMessage(
-                  role = "user",
-                  content = s"""$repoNameStr
-                       |
-                       |Generate a commit message for this diff:
-                       |
-                       |$diff""".stripMargin
-                )
+            val messages = Seq(
+              OpenAI.ChatMessage(role = "system", content = systemPrompt),
+              extraInstructionsMessage,
+              OpenAI.ChatMessage(
+                role = "user",
+                content = s"""$repoNameStr
+                     |
+                     |Generate a commit message for this diff:
+                     |
+                     |$diff""".stripMargin
               )
+            )
+
+            val msgJson =
+              normalizedProvider match
+                case "openai" =>
+                  val apiKey = sys.env.getOrElse(
+                    "OPENAI_API_KEY", {
+                      System.err.println(
+                        "Error: OPENAI_API_KEY environment variable not set"
+                      )
+                      sys.exit(1)
+                    }
+                  )
+                  OpenAI.callOpenAIChatCompletion(apiKey)(messages*)
+                case "codex" =>
+                  Codex.generateCommitMessage(messages*)
+                case other =>
+                  System.err.println(
+                    s"Error: unknown provider '$other'. Expected openai or codex."
+                  )
+                  sys.exit(1)
 
             val commitMessage = read[CommitMessage](msgJson)
 

@@ -13,12 +13,25 @@ projects:
   gitAutoReword:
     dependencies:
     - com.lihaoyi::os-lib:0.11.6
-    - com.lihaoyi::requests:0.9.2
-    - com.lihaoyi::upickle:4.4.2
     - com.monovore::decline:2.5.0
+    dependsOn: gitCommitMessageGenerator
     extends: template-common
     platform:
       mainClass: GitAutoReword
+  gitCommitMessageGenerator:
+    dependencies:
+    - com.lihaoyi::os-lib:0.11.6
+    - com.lihaoyi::requests:0.9.2
+    - com.lihaoyi::upickle:4.4.2
+    extends: template-common
+  gitCommitMessage:
+    dependencies:
+    - com.lihaoyi::os-lib:0.11.6
+    - com.monovore::decline:2.5.0
+    dependsOn: gitCommitMessageGenerator
+    extends: template-common
+    platform:
+      mainClass: GitCommitMessage
   testIndex:
     dependencies:
     - com.googlecode.lanterna:lanterna:3.2.0-alpha1

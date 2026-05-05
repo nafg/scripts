@@ -1,5 +1,12 @@
 git-auto-reword = "bleep --directory $MISE_TASK_DIR run gitAutoReword -- --dir $MISE_ORIGINAL_CWD"
 
+[git-commit-message]
+run = '''
+bleep --directory "$MISE_TASK_DIR" dist gitCommitMessage 1>&2
+"$MISE_TASK_DIR/.bleep/builds/normal/.bloop/gitCommitMessage/dist/bin/gitCommitMessage" --dir "$MISE_ORIGINAL_CWD"
+'''
+description = "Generate a commit message for staged changes"
+
 [git-wt]
 run = "bleep --directory $MISE_TASK_DIR run git-wt -- --cwd $MISE_ORIGINAL_CWD"
 description = "A lightweight worktree manager for the 'git wt' alias"

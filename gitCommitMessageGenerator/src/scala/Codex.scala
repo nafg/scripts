@@ -12,15 +12,9 @@ object Codex {
     )
   )
 
-  def generateCommitMessage(messages: OpenAI.ChatMessage*): String = {
-    val prompt =
-      messages
-        .filter(_.content.trim.nonEmpty)
-        .map(message => s"${message.role}:\n${message.content}")
-        .mkString("\n\n")
-
-    val schemaFile = os.temp(prefix = "git-auto-reword-schema-")
-    val outputFile = os.temp(prefix = "git-auto-reword-output-")
+  def generateCommitMessage(prompt: String): String = {
+    val schemaFile = os.temp(prefix = "git-commit-message-schema-")
+    val outputFile = os.temp(prefix = "git-commit-message-output-")
 
     try {
       os.write.over(schemaFile, write(responseSchema))

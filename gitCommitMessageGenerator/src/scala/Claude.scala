@@ -14,7 +14,11 @@ object Claude extends Provider {
              |${inputs.diff}""".stripMargin
         )).mkString("\n\n")
 
-    val output = os.proc("claude", "-p").call(stdin = prompt).out.trim()
+    val output =
+      os.proc("env", "-u", "ANTHROPIC_API_KEY", "claude", "-p")
+        .call(stdin = prompt)
+        .out
+        .trim()
     stripFences(output)
   }
 

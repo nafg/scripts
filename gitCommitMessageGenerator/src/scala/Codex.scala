@@ -22,6 +22,7 @@ object Codex {
       val _ = os.proc(
         "codex",
         "exec",
+        "--ignore-user-config",
         "--ephemeral",
         "--sandbox",
         "read-only",

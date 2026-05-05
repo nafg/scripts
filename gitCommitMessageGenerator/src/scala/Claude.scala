@@ -1,7 +1,9 @@
 object Claude extends Provider {
-  val name: String = "claude"
+  val name: String                       = "claude"
+  val defaultModel: String               = "sonnet"
+  override val exampleModels: Seq[String] = Seq("sonnet", "opus", "haiku")
 
-  def generate(inputs: PromptInputs): String = {
+  def generate(inputs: PromptInputs, model: String): String = {
     val prompt =
       (Seq(s"system:\n${inputs.system}") ++
         inputs.extraInstructions.map(i => s"system:\n$i") ++
@@ -15,7 +17,7 @@ object Claude extends Provider {
         )).mkString("\n\n")
 
     val output =
-      os.proc("env", "-u", "ANTHROPIC_API_KEY", "claude", "-p")
+      os.proc("env", "-u", "ANTHROPIC_API_KEY", "claude", "-p", "--model", model)
         .call(stdin = prompt)
         .out
         .trim()

@@ -50,7 +50,7 @@ object CommitMessageGenerator {
       request = request,
       diff = diff
     )
-    read[CommitMessage](settings.provider.generate(inputs))
+    read[CommitMessage](settings.provider.generate(inputs, settings.model))
   }
 
   def render(message: CommitMessage): String =

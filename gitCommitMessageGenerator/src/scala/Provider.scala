@@ -9,7 +9,9 @@ case class PromptInputs(
 
 trait Provider {
   def name: String
-  def generate(inputs: PromptInputs): String
+  def defaultModel: String
+  def exampleModels: Seq[String] = Seq(defaultModel)
+  def generate(inputs: PromptInputs, model: String): String
 }
 
 object Provider {

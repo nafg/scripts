@@ -2,7 +2,9 @@ import upickle.default.*
 
 
 object Codex extends Provider {
-  val name: String = "codex"
+  val name: String                       = "codex"
+  val defaultModel: String               = "gpt-5-codex"
+  override val exampleModels: Seq[String] = Seq("gpt-5-codex", "gpt-5")
 
   private val responseSchema = ujson.Obj(
     "type"                 -> "object",
@@ -14,7 +16,7 @@ object Codex extends Provider {
     )
   )
 
-  def generate(inputs: PromptInputs): String = {
+  def generate(inputs: PromptInputs, model: String): String = {
     val prompt =
       (Seq(s"system:\n${inputs.system}") ++
         inputs.extraInstructions.map(i => s"system:\n$i") ++
@@ -40,6 +42,8 @@ object Codex extends Provider {
         "--ephemeral",
         "--sandbox",
         "read-only",
+        "--model",
+        model,
         "--cd",
         os.pwd.toString,
         "--output-schema",

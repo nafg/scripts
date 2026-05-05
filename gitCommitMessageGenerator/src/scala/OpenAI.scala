@@ -3,7 +3,9 @@ import upickle.default.*
 
 
 object OpenAI extends Provider {
-  val name: String = "openai"
+  val name: String                       = "openai"
+  val defaultModel: String               = "gpt-4.1-mini"
+  override val exampleModels: Seq[String] = Seq("gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-5-mini")
 
   private case class ChatMessage(role: String, content: String) derives ReadWriter
   private case class ResponseChoice(message: ChatMessage, index: Int) derives Reader
@@ -11,8 +13,8 @@ object OpenAI extends Provider {
     id: String,
     choices: Seq[ResponseChoice]) derives Reader
 
-  def generate(inputs: PromptInputs): String = {
-    val apiKey = sys.env.getOrElse(
+  def generate(inputs: PromptInputs, model: String): String = {
+    val apiKey   = sys.env.getOrElse(
       "OPENAI_API_KEY", {
         System.err.println("Error: OPENAI_API_KEY environment variable not set")
         sys.exit(1)
@@ -32,13 +34,13 @@ object OpenAI extends Provider {
           )
         )
 
-    callChatCompletion(apiKey, messages)
+    callChatCompletion(apiKey, messages, model)
   }
 
   private def callChatCompletion(
     apiKey: String,
     messages: Seq[ChatMessage],
-    model: String = "gpt-4.1-mini",
+    model: String,
     temperature: Double = 0.5
   ): String = {
     val requestBody = ujson.Obj(

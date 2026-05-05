@@ -1,18 +1,32 @@
 import upickle.default.*
 
 
-object Codex {
+object Codex extends Provider {
+  val name: String = "codex"
+
   private val responseSchema = ujson.Obj(
     "type"                 -> "object",
     "additionalProperties" -> false,
     "required"             -> ujson.Arr("subject", "body"),
-    "properties" -> ujson.Obj(
+    "properties"           -> ujson.Obj(
       "subject" -> ujson.Obj("type" -> "string"),
       "body"    -> ujson.Obj("type" -> "string")
     )
   )
 
-  def generateCommitMessage(prompt: String): String = {
+  def generate(inputs: PromptInputs): String = {
+    val prompt =
+      (Seq(s"system:\n${inputs.system}") ++
+        inputs.extraInstructions.map(i => s"system:\n$i") ++
+        Seq(
+          s"""user:
+             |${inputs.repo}
+             |
+             |${inputs.request}
+             |
+             |${inputs.diff}""".stripMargin
+        )).mkString("\n\n")
+
     val schemaFile = os.temp(prefix = "git-commit-message-schema-")
     val outputFile = os.temp(prefix = "git-commit-message-output-")
 

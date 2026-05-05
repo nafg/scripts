@@ -25,7 +25,6 @@ object GitCommitMessage
               println(
                 CommitMessageGenerator.render(
                   CommitMessageGenerator.generate(
-                    provider = "codex",
                     repo = CommitMessageGenerator.repoDescription,
                     request = "Generate a commit message for these staged changes:",
                     diff = diff

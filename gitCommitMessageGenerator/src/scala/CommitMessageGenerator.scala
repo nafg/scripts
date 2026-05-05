@@ -38,48 +38,23 @@ object CommitMessageGenerator {
     ).getOrElse("Directory: " + os.pwd.last)
 
   def generate(
-    provider: String,
     repo: String,
     request: String,
     diff: String
   ): CommitMessage = {
-    val prompt = commitMessagePrompt(repo, request, diff)
-    val msgJson =
-      provider.toLowerCase match
-        case "codex" =>
-          Codex.generateCommitMessage(prompt.asCodexPrompt)
-        case "openai" =>
-          val apiKey = sys.env.getOrElse(
-            "OPENAI_API_KEY", {
-              System.err.println("Error: OPENAI_API_KEY environment variable not set")
-              sys.exit(1)
-            }
-          )
-          OpenAI.callOpenAIChatCompletion(apiKey)(prompt.asOpenAIMessages*)
-        case other =>
-          System.err.println(
-            s"Error: unknown provider '$other'. Expected codex or openai."
-          )
-          sys.exit(1)
-
-    read[CommitMessage](msgJson)
-  }
-
-  def render(message: CommitMessage): String =
-    s"${message.subject}\n\n${message.body}"
-
-  private def commitMessagePrompt(
-    repo: String,
-    request: String,
-    diff: String
-  ): CommitMessagePrompt =
-    CommitMessagePrompt(
+    val settings = Config.load()
+    val inputs   = PromptInputs(
       system = systemPrompt,
       extraInstructions = extraInstructions,
       repo = repo,
       request = request,
       diff = diff
     )
+    read[CommitMessage](settings.provider.generate(inputs))
+  }
+
+  def render(message: CommitMessage): String =
+    s"${message.subject}\n\n${message.body}"
 
   private def extraInstructions: Option[String] = {
     val file = os.pwd / ".github" / "git-commit-instructions.md"
@@ -88,40 +63,4 @@ object CommitMessageGenerator {
         os.read(file)
     )
   }
-}
-
-private case class CommitMessagePrompt(
-  system: String,
-  extraInstructions: Option[String],
-  repo: String,
-  request: String,
-  diff: String
-) {
-  def asCodexPrompt: String =
-    (Seq(s"system:\n$system") ++
-      extraInstructions.map(instructions => s"system:\n$instructions") ++
-      Seq(
-        s"""user:
-           |$repo
-           |
-           |$request
-           |
-           |$diff""".stripMargin
-      )).mkString("\n\n")
-
-  def asOpenAIMessages: Seq[OpenAI.ChatMessage] =
-    Seq(OpenAI.ChatMessage(role = "system", content = system)) ++
-      extraInstructions.map(instructions =>
-        OpenAI.ChatMessage(role = "system", content = instructions)
-      ) ++
-      Seq(
-        OpenAI.ChatMessage(
-          role = "user",
-          content = s"""$repo
-               |
-               |$request
-               |
-               |$diff""".stripMargin
-        )
-      )
 }

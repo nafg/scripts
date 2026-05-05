@@ -1,6 +1,6 @@
 import java.nio.file.Path
 
-import cats.implicits.catsSyntaxTuple3Semigroupal
+import cats.implicits.catsSyntaxTuple2Semigroupal
 import com.monovore.decline.{CommandApp, Opts}
 
 
@@ -25,21 +25,14 @@ object GitAutoReword
               "The git directory. Defaults to the current directory."
             )
             .withDefault(Path.of(".")),
-          Opts
-            .option[String](
-              "provider",
-              "Message provider: codex or openai. Defaults to codex."
-            )
-            .withDefault(sys.env.getOrElse("GIT_AUTO_REWORD_PROVIDER", "codex")),
           Opts.argument[String]("commit").withDefault("HEAD")
-        ).mapN { (dir, provider, commit) =>
+        ).mapN { (dir, commit) =>
           os.dynamicPwd.withValue(os.FilePath(dir).resolveFrom(os.pwd)) {
             println("Current commit message:")
             println(exec("git", "show", "--color=always", commit, "--"))
 
-            val diff = exec("git", "show", commit, "--format=")
+            val diff          = exec("git", "show", commit, "--format=")
             val commitMessage = CommitMessageGenerator.generate(
-              provider = provider,
               repo = CommitMessageGenerator.repoDescription,
               request = "Generate a commit message for this diff:",
               diff = diff

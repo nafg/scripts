@@ -13,6 +13,6 @@ trait Provider {
 }
 
 object Provider {
-  val all: Seq[Provider]                       = Seq(Codex, OpenAI)
-  def fromName(s: String): Option[Provider]    = all.find(_.name.equalsIgnoreCase(s))
+  val all: Seq[Provider]                    = Seq(Codex, OpenAI, Claude)
+  def fromName(s: String): Option[Provider] = all.find(_.name.equalsIgnoreCase(s))
 }
